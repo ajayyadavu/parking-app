@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.models.settings import AppSettings
 from app.routers import auth, booking, parking
+from app.routers import admin, auth, booking, parking
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(parking.router)
 app.include_router(booking.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

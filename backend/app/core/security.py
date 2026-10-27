@@ -1,4 +1,6 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+UTC = timezone.utc
 
 from jose import jwt
 from passlib.context import CryptContext

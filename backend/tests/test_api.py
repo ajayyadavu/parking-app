@@ -52,5 +52,27 @@ def test_admin_cannot_self_register():
     assert res.status_code == 400
 
 
+def test_admin_routes_are_protected():
+    # Bina token ke
+    assert client.get("/admin/stats").status_code == 401
+
+    # Driver token se
+    email = f"drv_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Driver",
+            "phone": "9999999999",
+            "email": email,
+            "password": "secret123",
+            "role": "driver",
+        },
+    )
+    login = client.post("/auth/login", data={"username": email, "password": "secret123"})
+    token = login.json()["access_token"]
+
+    res = client.get("/admin/stats", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 403
+
 def test_protected_route_needs_token():
     assert client.get("/auth/me").status_code == 401
