@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { CalendarCheck, Car, LayoutDashboard, LogOut, Plus, Search, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useSocket } from "../context/SocketContext";
 
 const LINKS = {
   driver: [
@@ -16,6 +17,7 @@ const LINKS = {
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { connected } = useSocket();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -41,6 +43,13 @@ export default function Navbar() {
         </nav>
 
         <div className="header-right">
+          <span
+            className={`live ${connected ? "on" : ""}`}
+            title={connected ? "Live updates connected" : "Reconnecting..."}
+          >
+            <i />
+            {connected ? "Live" : "Offline"}
+          </span>
           <div className="user-chip">
             <div className="avatar">{user.name.charAt(0).toUpperCase()}</div>
             <div className="user-meta">

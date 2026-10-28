@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import require_role
+from app.core.websocket import manager
 from app.database import get_db
 from app.models.booking import Booking, BookingStatus
 from app.models.parking_spot import ParkingSpot
@@ -16,6 +17,27 @@ from app.services.pricing import calculate_amount
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 ACTIVE = (BookingStatus.pending, BookingStatus.accepted)
+
+
+def notify(
+    background: BackgroundTasks,
+    user_id: int,
+    event: str,
+    message: str,
+    booking_id: int,
+    level: str = "info",
+):
+    background.add_task(
+        manager.send,
+        user_id,
+        {
+            "type": "notification",
+            "event": event,
+            "level": level,
+            "message": message,
+            "booking_id": booking_id,
+        },
+    )
 
 
 def to_out(b: Booking) -> BookingOut:
@@ -61,6 +83,7 @@ def get_owner_booking(db: Session, booking_id: int, owner: User) -> Booking:
 @router.post("", response_model=BookingOut, status_code=201)
 def create_booking(
     data: BookingCreate,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(UserRole.driver)),
 ):
@@ -103,6 +126,14 @@ def create_booking(
     db.add(booking)
     db.commit()
     db.refresh(booking)
+
+    notify(
+        background,
+        spot.owner_id,
+        "new_request",
+        f"New parking request from {user.name} for {spot.title}",
+        booking.id,
+    )
     return to_out(booking)
 
 
@@ -138,6 +169,7 @@ def incoming_bookings(
 @router.put("/{booking_id}/accept", response_model=BookingOut)
 def accept_booking(
     booking_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(UserRole.owner)),
 ):
@@ -152,12 +184,23 @@ def accept_booking(
     booking.start_time = datetime.now()
     db.commit()
     db.refresh(booking)
+
+    notify(
+        background,
+        booking.driver_id,
+        "accepted",
+        f"{user.name} accepted your request for {booking.spot.title}. "
+        "Open My bookings for directions.",
+        booking.id,
+        "success",
+    )
     return to_out(booking)
 
 
 @router.put("/{booking_id}/reject", response_model=BookingOut)
 def reject_booking(
     booking_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(UserRole.owner)),
 ):
@@ -167,12 +210,22 @@ def reject_booking(
     booking.status = BookingStatus.rejected
     db.commit()
     db.refresh(booking)
+
+    notify(
+        background,
+        booking.driver_id,
+        "rejected",
+        f"Your request for {booking.spot.title} was rejected.",
+        booking.id,
+        "error",
+    )
     return to_out(booking)
 
 
 @router.put("/{booking_id}/cancel", response_model=BookingOut)
 def cancel_booking(
     booking_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(UserRole.driver)),
 ):
@@ -189,12 +242,21 @@ def cancel_booking(
     booking.status = BookingStatus.cancelled
     db.commit()
     db.refresh(booking)
+
+    notify(
+        background,
+        booking.spot.owner_id,
+        "cancelled",
+        f"{user.name} cancelled the booking for {booking.spot.title}.",
+        booking.id,
+    )
     return to_out(booking)
 
 
 @router.put("/{booking_id}/complete", response_model=BookingOut)
 def complete_booking(
     booking_id: int,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(UserRole.owner)),
 ):
@@ -211,4 +273,13 @@ def complete_booking(
     spot.available_slots = min(spot.capacity, spot.available_slots + 1)
     db.commit()
     db.refresh(booking)
+
+    notify(
+        background,
+        booking.driver_id,
+        "completed",
+        f"Parking completed at {booking.spot.title}. Total amount: ₹{booking.total_amount:g}",
+        booking.id,
+        "success",
+    )
     return to_out(booking)

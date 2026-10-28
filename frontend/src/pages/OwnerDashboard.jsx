@@ -6,7 +6,7 @@ import BookingCard from "../components/BookingCard";
 import EmptyState from "../components/EmptyState";
 import StatCard from "../components/StatCard";
 import { useToast } from "../context/ToastContext";
-import { usePolling } from "../utils/hooks";
+import { useLiveRefresh, usePolling } from "../utils/hooks";
 import { errorMessage, money } from "../utils/format";
 
 const MESSAGES = {
@@ -29,7 +29,8 @@ export default function OwnerDashboard() {
       .catch(() => {})
       .finally(() => setLoaded(true));
 
-  usePolling(load, 5000);
+usePolling(load, 30000); // fallback
+useLiveRefresh(load);
 
   const handleAction = async (action, booking) => {
     setBusyId(booking.id);

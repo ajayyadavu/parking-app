@@ -8,11 +8,15 @@ export function ToastProvider({ children }) {
   const push = useCallback((type, message) => {
     const id = Date.now() + Math.random();
     setItems((list) => [...list, { id, type, message }]);
-    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), 3500);
+    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), 4500);
   }, []);
 
   const value = useMemo(
-    () => ({ success: (m) => push("success", m), error: (m) => push("error", m) }),
+    () => ({
+      success: (m) => push("success", m),
+      error: (m) => push("error", m),
+      info: (m) => push("info", m),
+    }),
     [push]
   );
 

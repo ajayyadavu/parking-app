@@ -74,5 +74,14 @@ def test_admin_routes_are_protected():
     res = client.get("/admin/stats", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 403
 
+
+    def test_websocket_rejects_invalid_token():
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws?token=not-a-real-token"):
+            pass
+
 def test_protected_route_needs_token():
     assert client.get("/auth/me").status_code == 401
