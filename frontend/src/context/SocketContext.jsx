@@ -28,7 +28,11 @@ export function SocketProvider({ children }) {
     let stopped = false;
 
     const connect = () => {
-      const base = api.defaults.baseURL.replace(/^http/, "ws"); // http -> ws, https -> wss
+      //const base = api.defaults.baseURL.replace(/^http/, "ws"); // http -> ws, https -> wss
+    const root = (api.defaults.baseURL || "/").replace(/\/$/, "");
+    const base = root.startsWith("http")
+    ? root.replace(/^http/, "ws")
+    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}${root}`;
       ws = new WebSocket(`${base}/ws?token=${encodeURIComponent(token)}`);
 
       ws.onopen = () => {

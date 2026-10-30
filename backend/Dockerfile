@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,13 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Pehle sirf requirements copy karo, taaki code badalne par packages dobara install na ho (layer cache)
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app ./app
 
-# Root user se mat chalao (security)
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser
 

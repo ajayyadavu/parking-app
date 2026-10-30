@@ -83,5 +83,54 @@ def test_admin_routes_are_protected():
         with client.websocket_connect("/ws?token=not-a-real-token"):
             pass
 
+
+
+            def test_ai_requires_login():
+    res = client.post("/ai/parse", json={"text": "parking near me"})
+    assert res.status_code == 401
+
+
+def test_sanitize_intent_clamps_bad_model_output():
+    from app.services.ai_service import sanitize_intent
+
+    out = sanitize_intent(
+        {
+            "place": "  Connaught Place  ",
+            "use_current_location": True,
+            "vehicle_type": "truck",
+            "duration_hours": 500,
+            "radius_km": 3,
+        }
+    )
+    assert out["place"] == "Connaught Place"
+    assert out["use_current_location"] is False  # place hai, to current location nahi
+    assert out["vehicle_type"] is None
+    assert out["duration_hours"] == 72.0
+    assert out["radius_km"] == 5
+
+
+    def test_rule_parser_hinglish():
+    from app.services.ai_service import parse_intent
+
+    out = parse_intent("mujhe Connaught Place ke paas 2 ghante ke liye car parking chahiye")
+    assert out["place"].lower() == "connaught place"
+    assert out["vehicle_type"] == "car"
+    assert out["duration_hours"] == 2.0
+    assert out["use_current_location"] is False
+
+
+def test_rule_parser_near_me_and_radius():
+    from app.services.ai_service import parse_intent
+
+    out = parse_intent("bike parking near me for 30 minutes")
+    assert out["use_current_location"] is True
+    assert out["place"] is None
+    assert out["vehicle_type"] == "bike"
+    assert out["duration_hours"] == 0.5
+
+    out = parse_intent("Karol Bagh me car parking, 2 km ke andar")
+    assert out["place"].lower() == "karol bagh"
+    assert out["radius_km"] == 2
+
 def test_protected_route_needs_token():
     assert client.get("/auth/me").status_code == 401

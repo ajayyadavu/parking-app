@@ -6,7 +6,10 @@ import MapView from "../components/MapView";
 import ParkingCard from "../components/ParkingCard";
 import Segmented from "../components/Segmented";
 import EmptyState from "../components/EmptyState";
+import AiSearchBar from "../components/AiSearchBar";
+import AiPick from "../components/AiPick";
 import { useToast } from "../context/ToastContext";
+import { currentPosition, geocode } from "../utils/geo";
 import { errorMessage } from "../utils/format";
 
 const DEFAULT = { lat: 28.6139, lng: 77.209 }; // Delhi
@@ -17,12 +20,21 @@ export default function SearchParking() {
   const [point, setPoint] = useState(DEFAULT);
   const [radius, setRadius] = useState(5);
   const [vehicle, setVehicle] = useState("");
+  const [duration, setDuration] = useState(1);
   const [query, setQuery] = useState("");
   const [spots, setSpots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState(null);
   const [requestingId, setRequestingId] = useState(null);
   const [flyTo, setFlyTo] = useState(null);
+
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPick, setAiPick] = useState(null);
+
+  useEffect(() => {
+    api.get("/ai/status").then((res) => setAiEnabled(res.data.enabled)).catch(() => {});
+  }, []);
 
   // Point, radius ya vehicle badle to automatically search
   useEffect(() => {
@@ -43,33 +55,79 @@ export default function SearchParking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [point, radius, vehicle]);
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) return toast.error("Location is not supported in this browser");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setPoint(p);
-        setFlyTo([p.lat, p.lng]);
-      },
-      () => toast.error("Location permission denied. Search a place or click on the map.")
-    );
+  const moveTo = (p) => {
+    setAiPick(null);
+    setPoint(p);
+    setFlyTo([p.lat, p.lng]);
   };
 
-  // Place ke naam se search (OpenStreetMap Nominatim, free)
+  const useMyLocation = async () => {
+    try {
+      moveTo(await currentPosition());
+    } catch {
+      toast.error("Location permission denied. Search a place or click on the map.");
+    }
+  };
+
   const searchPlace = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`
-      );
-      const data = await res.json();
-      if (!data.length) return toast.error("Place not found. Try a more specific name.");
-      const p = { lat: Number(data[0].lat), lng: Number(data[0].lon) };
-      setPoint(p);
-      setFlyTo([p.lat, p.lng]);
+      const found = await geocode(query);
+      if (!found) return toast.error("Place not found. Try a more specific name.");
+      moveTo(found);
     } catch {
       toast.error("Could not search this place right now");
+    }
+  };
+
+  // AI: text -> intent -> map move -> recommendation
+  const runAi = async (text) => {
+    setAiLoading(true);
+    setAiPick(null);
+    try {
+      const { data: intent } = await api.post("/ai/parse", { text });
+
+      let target = point;
+      if (intent.place) {
+        const found = await geocode(intent.place);
+        if (!found) {
+          toast.error(`Could not find "${intent.place}" on the map`);
+          return;
+        }
+        target = found;
+      } else if (intent.use_current_location) {
+        try {
+          target = await currentPosition();
+        } catch {
+          toast.error("Location permission denied. Please name a place instead.");
+          return;
+        }
+      }
+
+      const nextRadius = intent.radius_km ?? radius;
+      const nextVehicle = intent.vehicle_type ?? vehicle;
+      const nextDuration = intent.duration_hours ?? 1;
+
+      setPoint(target);
+      setRadius(nextRadius);
+      setVehicle(nextVehicle);
+      setDuration(nextDuration);
+      setFlyTo([target.lat, target.lng]);
+
+      const { data: rec } = await api.post("/ai/recommend", {
+        lat: target.lat,
+        lng: target.lng,
+        radius_km: nextRadius,
+        vehicle_type: nextVehicle || null,
+        duration_hours: nextDuration,
+      });
+      setAiPick(rec);
+      if (rec.spot) setActiveId(rec.spot.id);
+    } catch (err) {
+      toast.error(errorMessage(err, "AI search failed. Please try again."));
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -114,17 +172,32 @@ export default function SearchParking() {
       <div className="page-head">
         <div>
           <h1>Find parking</h1>
-          <p>Search a place or click on the map. Results update automatically.</p>
+          <p>Ask AI, search a place, or click on the map. Results update automatically.</p>
         </div>
       </div>
 
       <div className="search-layout">
         <div className="search-panel">
+          {aiEnabled && <AiSearchBar onSubmit={runAi} loading={aiLoading} />}
+
+          <AiPick
+            pick={aiPick}
+            duration={duration}
+            onSelect={selectSpot}
+            onRequest={requestSpot}
+            requesting={aiPick?.spot && requestingId === aiPick.spot.id}
+          />
+
           <div className="card search-controls">
             <form className="search-row" onSubmit={searchPlace}>
               <div className="input-icon">
                 <Search size={16} />
-                <input className="input" placeholder="Search area, e.g. Connaught Place" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input
+                  className="input"
+                  placeholder="Search area, e.g. Connaught Place"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
               </div>
               <button className="btn btn-primary">Go</button>
             </form>
@@ -195,7 +268,7 @@ export default function SearchParking() {
             center={[point.lat, point.lng]}
             markers={markers}
             flyTo={flyTo}
-            onMapClick={(lat, lng) => setPoint({ lat, lng })}
+            onMapClick={(lat, lng) => moveTo({ lat, lng })}
           />
         </div>
       </div>

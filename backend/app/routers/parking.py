@@ -1,15 +1,12 @@
-from math import cos, radians
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_role
 from app.database import get_db
 from app.models.parking_spot import ParkingSpot, VehicleType
-from app.models.settings import AppSettings
 from app.models.user import User, UserRole
 from app.schemas.parking_spot import NearbySpotOut, SpotCreate, SpotOut
-from app.services.distance import haversine_km
+from app.services.search import find_nearby
 
 router = APIRouter(prefix="/parking", tags=["Parking"])
 
@@ -73,34 +70,4 @@ def nearby_spots(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # Pehle ek chhota box se database me filter, phir exact distance Python me
-    lat_delta = radius_km / 111
-    lng_delta = radius_km / (111 * max(cos(radians(lat)), 0.01))
-
-    query = db.query(ParkingSpot).filter(
-        ParkingSpot.is_active == True,
-        ParkingSpot.available_slots > 0,
-        ParkingSpot.latitude.between(lat - lat_delta, lat + lat_delta),
-        ParkingSpot.longitude.between(lng - lng_delta, lng + lng_delta),
-    )
-    if vehicle_type:
-        query = query.filter(ParkingSpot.vehicle_type == vehicle_type)
-
-    app_settings = db.query(AppSettings).first()
-    price = app_settings.price_per_hour if app_settings else 20
-
-    results = []
-    for spot in query.all():
-        distance = haversine_km(lat, lng, spot.latitude, spot.longitude)
-        if distance <= radius_km:
-            results.append(
-                NearbySpotOut(
-                    **SpotOut.model_validate(spot).model_dump(),
-                    distance_km=round(distance, 2),
-                    price_per_hour=price,
-                    owner_name=spot.owner.name,
-                )
-            )
-
-    results.sort(key=lambda s: s.distance_km)
-    return results
+    return find_nearby(db, lat, lng, radius_km, vehicle_type)
