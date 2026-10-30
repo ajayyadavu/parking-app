@@ -1,12 +1,22 @@
-// Place ke naam se coordinates (OpenStreetMap Nominatim, free)
-export async function geocode(query) {
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`
-  );
-  if (!res.ok) throw new Error("geocode failed");
+// OpenStreetMap Nominatim (free). Policy: max 1 request/second, isliye Enter par search.
+export async function searchPlaces(query, limit = 5) {
+  const url =
+    "https://nominatim.openstreetmap.org/search?format=jsonv2" +
+    `&limit=${limit}&countrycodes=in&accept-language=en&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("place search failed");
   const data = await res.json();
-  if (!data.length) return null;
-  return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+  return data.map((d) => ({
+    name: d.display_name,
+    lat: Number(d.lat),
+    lng: Number(d.lon),
+  }));
+}
+
+// Pehla result (Find parking page isi ko use karta hai)
+export async function geocode(query) {
+  const results = await searchPlaces(query, 1);
+  return results[0] ? { lat: results[0].lat, lng: results[0].lng } : null;
 }
 
 export function currentPosition() {

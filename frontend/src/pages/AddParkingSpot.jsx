@@ -6,6 +6,7 @@ import Segmented from "../components/Segmented";
 import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../context/ToastContext";
 import { errorMessage } from "../utils/format";
+import PlaceSearch from "../components/PlaceSearch";
 
 const DEFAULT = [28.6139, 77.209]; // Delhi
 
@@ -119,6 +120,14 @@ export default function AddParkingSpot() {
 
           <div className="field">
             <label>Location</label>
+            <label>Location</label>
+            <PlaceSearch
+              onSelect={(p) => {
+                setPosition([p.lat, p.lng]);
+                setFlyTo([p.lat, p.lng]);
+                setForm((f) => (f.address ? f : { ...f, address: p.name }));
+              }}
+            />
             <button type="button" className="btn btn-secondary btn-sm" onClick={useMyLocation}>
               <Locate size={15} /> Use my current location
             </button>
