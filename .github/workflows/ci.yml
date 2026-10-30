@@ -44,6 +44,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Lint (ruff)
         run: ruff check .
+      - name: Migrate database
+        run: alembic upgrade head
       - name: Run tests
         run: pytest -v
 

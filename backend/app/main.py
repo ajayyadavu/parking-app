@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401
 from app.config import settings
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
 from app.models.settings import AppSettings
 from app.routers import admin, ai, auth, booking, parking, ws
 
-Base.metadata.create_all(bind=engine)
+
 
 
 def seed_settings():
